@@ -21,7 +21,9 @@ app.use(express.json());
 // API health check
 app.get("/api/health", async (req, res) => {
   try {
-    const [rows] = await pool.query("SELECT DATABASE() AS databaseName");
+    const [rows] = await pool.query(
+      "SELECT DATABASE() AS databaseName"
+    );
 
     res.status(200).json({
       status: "OK",
@@ -78,22 +80,19 @@ async function startServer() {
     console.log("WARNING: Server started without a database connection.");
   }
 
-  app.listen(PORT, () => {
-    console.log(`Batloung Farm API running at http://localhost:${PORT}`);
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Batloung Farm API running on port ${PORT}`);
   });
 }
 
 startServer();
 
 // Graceful shutdown
-process.on("SIGINT", async () => {
+async function shutdown() {
   console.log("Shutting down server...");
   await pool.end();
   process.exit(0);
-});
+}
 
-process.on("SIGTERM", async () => {
-  console.log("Shutting down server...");
-  await pool.end();
-  process.exit(0);
-});
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
