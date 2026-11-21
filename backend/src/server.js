@@ -1,6 +1,9 @@
 
 import express from "express";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+
 import pool, { testDatabaseConnection } from "./config/db.js";
 
 import supplierRoutes from "./routes/supplierRoutes.js";
@@ -13,6 +16,15 @@ import reportRoutes from "./routes/reportRoutes.js";
 import errorHandler from "./middleware/errorHandler.js";
 
 const app = express();
+
+// Frontend directory configuration
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const frontendPath = path.resolve(
+  __dirname,
+  "../../frontend/dist"
+);
 
 // Middleware
 app.use(cors());
@@ -59,8 +71,27 @@ app.use("/api/stock", stockRoutes);
 app.use("/api", transactionRoutes);
 app.use("/api/reports", reportRoutes);
 
-// Unknown endpoint
-app.use((req, res) => {
+// Serve React frontend files
+app.use(express.static(frontendPath));
+
+// React frontend fallback
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api/")) {
+    return next();
+  }
+
+  res.sendFile(
+    path.join(frontendPath, "index.html"),
+    (error) => {
+      if (error) {
+        next(error);
+      }
+    }
+  );
+});
+
+// Unknown API endpoint
+app.use("/api", (req, res) => {
   res.status(404).json({
     status: "ERROR",
     message: "API endpoint not found."
@@ -77,11 +108,15 @@ async function startServer() {
   const databaseConnected = await testDatabaseConnection();
 
   if (!databaseConnected) {
-    console.log("WARNING: Server started without a database connection.");
+    console.log(
+      "WARNING: Server started without a database connection."
+    );
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Batloung Farm API running on port ${PORT}`);
+    console.log(
+      `Batloung Farm application running on port ${PORT}`
+    );
   });
 }
 
