@@ -85,7 +85,6 @@ export async function vendorBalances(req, res) {
        COALESCE(p.total_paid, 0) AS total_paid,
        COALESCE(s.total_sales, 0) -
        COALESCE(p.total_paid, 0) AS outstanding_balance
-
      FROM vendors v
 
      LEFT JOIN (
@@ -99,10 +98,10 @@ export async function vendorBalances(req, res) {
      LEFT JOIN (
        SELECT
          sa.vendor_id,
-         SUM(vp.amount_paid) AS total_paid
+         SUM(pay.amount) AS total_paid
        FROM sales sa
-       JOIN vendor_payments vp
-         ON vp.sale_id = sa.sale_id
+       JOIN payments pay
+         ON pay.sale_id = sa.sale_id
        GROUP BY sa.vendor_id
      ) p ON p.vendor_id = v.vendor_id
 
