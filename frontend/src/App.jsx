@@ -39,9 +39,43 @@ const emptyVendor = {
   location: ""
 };
 
+const initialPurchase = () => ({
+  supplier_id: "",
+  items: [
+    {
+      fruit_id: "",
+      quantity: 1,
+      packaging_size: "SMALL",
+      unit_cost: 0
+    }
+  ]
+});
+
+const initialSale = () => ({
+  vendor_id: "",
+  payment_method: "CASH",
+  amount_paid: 0,
+  items: [
+    {
+      fruit_id: "",
+      quantity: 1,
+      packaging_size: "SMALL"
+    }
+  ]
+});
+
 export default function App() {
   const [page, setPage] = useState("Dashboard");
-  const [data, setData] = useState({});
+  const [data, setData] = useState({
+    suppliers: [],
+    fruits: [],
+    vendors: [],
+    stock: [],
+    low: [],
+    balances: [],
+    top: []
+  });
+
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
@@ -58,30 +92,8 @@ export default function App() {
     status: "AVAILABLE"
   });
 
-  const [purchase, setPurchase] = useState({
-    supplier_id: "",
-    items: [
-      {
-        fruit_id: "",
-        quantity: 1,
-        packaging_size: "SMALL",
-        unit_cost: 0
-      }
-    ]
-  });
-
-  const [sale, setSale] = useState({
-    vendor_id: "",
-    payment_method: "CASH",
-    amount_paid: 0,
-    items: [
-      {
-        fruit_id: "",
-        quantity: 1,
-        packaging_size: "SMALL"
-      }
-    ]
-  });
+  const [purchase, setPurchase] = useState(initialPurchase());
+  const [sale, setSale] = useState(initialSale());
 
   const [search, setSearch] = useState("");
 
@@ -90,29 +102,51 @@ export default function App() {
     setLoading(true);
     setError("");
 
-    try {
-      const calls = {
-        suppliers: api.get("/suppliers"),
-        fruits: api.get("/fruits"),
-        vendors: api.get("/vendors"),
-        stock: api.get("/stock"),
-        low: api.get("/fruits/low-stock"),
-        balances: api.get("/reports/vendor-balances"),
-        top: api.get("/reports/top-fruits")
-      };
+    const endpoints = {
+      suppliers: "/suppliers",
+      fruits: "/fruits",
+      vendors: "/vendors",
+      stock: "/stock",
+      low: "/fruits/low-stock",
+      balances: "/reports/vendor-balances",
+      top: "/reports/top-fruits"
+    };
 
-      const keys = Object.keys(calls);
-      const values = await Promise.all(Object.values(calls));
+    const keys = Object.keys(endpoints);
+
+    try {
+      const results = await Promise.allSettled(
+        keys.map((key) => api.get(endpoints[key]))
+      );
 
       const next = {};
+      const failed = [];
 
-      keys.forEach((key, index) => {
-        next[key] = values[index];
+      results.forEach((result, index) => {
+        const key = keys[index];
+
+        if (result.status === "fulfilled") {
+          next[key] = result.value;
+        } else {
+          next[key] = [];
+          failed.push(key);
+
+          console.error(
+            `Failed to load ${key}:`,
+            result.reason
+          );
+        }
       });
 
       setData(next);
+
+      if (failed.length > 0) {
+        setError(
+          `Some records could not load: ${failed.join(", ")}. Other records loaded successfully.`
+        );
+      }
     } catch (e) {
-      setError(e.message);
+      setError(e.message || "Unable to load application data.");
     } finally {
       setLoading(false);
     }
@@ -182,7 +216,7 @@ export default function App() {
         </thead>
 
         <tbody>
-          {rows.length ? (
+          {rows.length > 0 ? (
             rows.map((row, index) => (
               <tr key={index}>
                 {row.map((value, column) => (
@@ -246,22 +280,22 @@ export default function App() {
       <div className="stats">
         <article>
           <span>Suppliers</span>
-          <b>{data.suppliers?.length || 0}</b>
+          <b>{data.suppliers.length}</b>
         </article>
 
         <article>
           <span>Fruits</span>
-          <b>{data.fruits?.length || 0}</b>
+          <b>{data.fruits.length}</b>
         </article>
 
         <article>
           <span>Vendors</span>
-          <b>{data.vendors?.length || 0}</b>
+          <b>{data.vendors.length}</b>
         </article>
 
         <article>
           <span>Stock records</span>
-          <b>{data.stock?.length || 0}</b>
+          <b>{data.stock.length}</b>
         </article>
       </div>
 
@@ -269,7 +303,7 @@ export default function App() {
 
       {table(
         ["Fruit", "Packaging", "Available boxes"],
-        (data.low || []).map((item) => [
+        data.low.map((item) => [
           item.fruit_name,
           item.packaging_size,
           item.available_quantity
@@ -284,10 +318,7 @@ export default function App() {
     content = dashboard;
   }
 
-  // =====================================
-  // SUPPLIERS - ADD, EDIT AND DELETE
-  // =====================================
-
+  // SUPPLIERS
   if (page === "Suppliers") {
     content = (
       <>
@@ -315,42 +346,21 @@ export default function App() {
             });
           }}
         >
-          {field(
-            "Business name",
-            supplier.business_name,
-            (value) =>
-              setSupplier({ ...supplier, business_name: value })
-          )}
+          {field("Business name", supplier.business_name,
+            (value) => setSupplier({ ...supplier, business_name: value }))}
 
-          {field(
-            "Contact person",
-            supplier.contact_person,
-            (value) =>
-              setSupplier({ ...supplier, contact_person: value })
-          )}
+          {field("Contact person", supplier.contact_person,
+            (value) => setSupplier({ ...supplier, contact_person: value }))}
 
-          {field(
-            "Phone",
-            supplier.phone,
-            (value) =>
-              setSupplier({ ...supplier, phone: value })
-          )}
+          {field("Phone", supplier.phone,
+            (value) => setSupplier({ ...supplier, phone: value }))}
 
-          {field(
-            "Province",
-            supplier.province,
-            (value) =>
-              setSupplier({ ...supplier, province: value }),
-            "text",
-            provinces
-          )}
+          {field("Province", supplier.province,
+            (value) => setSupplier({ ...supplier, province: value }),
+            "text", provinces)}
 
-          {field(
-            "Address",
-            supplier.address,
-            (value) =>
-              setSupplier({ ...supplier, address: value })
-          )}
+          {field("Address", supplier.address,
+            (value) => setSupplier({ ...supplier, address: value }))}
 
           <button type="submit">
             {editingSupplierId ? "Update supplier" : "Add supplier"}
@@ -388,7 +398,7 @@ export default function App() {
             </thead>
 
             <tbody>
-              {(data.suppliers || []).length > 0 ? (
+              {data.suppliers.length > 0 ? (
                 data.suppliers.map((s) => (
                   <tr key={s.supplier_id}>
                     <td>{s.supplier_id}</td>
@@ -397,7 +407,6 @@ export default function App() {
                     <td>{s.phone}</td>
                     <td>{s.province}</td>
                     <td>{s.address}</td>
-
                     <td>
                       <button
                         type="button"
@@ -410,7 +419,6 @@ export default function App() {
                             province: s.province,
                             address: s.address || ""
                           });
-
                           setEditingSupplierId(s.supplier_id);
                           setError("");
                           setNotice("");
@@ -422,11 +430,9 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (
-                            window.confirm(
-                              `Are you sure you want to delete ${s.business_name}?`
-                            )
-                          ) {
+                          if (window.confirm(
+                            `Are you sure you want to delete ${s.business_name}?`
+                          )) {
                             run(() =>
                               api.del(`/suppliers/${s.supplier_id}`)
                             );
@@ -450,10 +456,7 @@ export default function App() {
     );
   }
 
-  // =====================================
   // FRUITS AND STOCK
-  // =====================================
-
   if (page === "Fruits & Stock") {
     content = (
       <>
@@ -466,19 +469,12 @@ export default function App() {
             run(() => api.post("/fruits", fruit));
           }}
         >
-          {field(
-            "Fruit name",
-            fruit.fruit_name,
+          {field("Fruit name", fruit.fruit_name,
             (value) => setFruit({ ...fruit, fruit_name: value }),
-            "text",
-            ["Apples", "Bananas", "Oranges", "Mangoes", "Grapes"]
-          )}
+            "text", ["Apples", "Bananas", "Oranges", "Mangoes", "Grapes"])}
 
-          {field(
-            "Description",
-            fruit.description,
-            (value) => setFruit({ ...fruit, description: value })
-          )}
+          {field("Description", fruit.description,
+            (value) => setFruit({ ...fruit, description: value }))}
 
           <button type="submit">Add fruit</button>
         </form>
@@ -487,7 +483,7 @@ export default function App() {
 
         {table(
           ["Fruit", "Packaging size", "Available boxes"],
-          (data.stock || []).map((s) => [
+          data.stock.map((s) => [
             s.fruit_name,
             s.packaging_size,
             s.available_quantity
@@ -498,7 +494,7 @@ export default function App() {
 
         {table(
           ["ID", "Fruit", "Description", "Status"],
-          (data.fruits || []).map((f) => [
+          data.fruits.map((f) => [
             f.fruit_id,
             f.fruit_name,
             f.description,
@@ -509,12 +505,9 @@ export default function App() {
     );
   }
 
-  // =====================================
-  // VENDORS - ADD, EDIT AND DELETE
-  // =====================================
-
+  // VENDORS
   if (page === "Vendors") {
-    const filteredVendors = (data.vendors || []).filter((v) =>
+    const filteredVendors = data.vendors.filter((v) =>
       `${v.vendor_name || ""} ${v.phone_number || ""}`
         .toLowerCase()
         .includes(search.toLowerCase())
@@ -546,26 +539,14 @@ export default function App() {
             });
           }}
         >
-          {field(
-            "Vendor name",
-            vendor.vendor_name,
-            (value) =>
-              setVendor({ ...vendor, vendor_name: value })
-          )}
+          {field("Vendor name", vendor.vendor_name,
+            (value) => setVendor({ ...vendor, vendor_name: value }))}
 
-          {field(
-            "Phone number",
-            vendor.phone_number,
-            (value) =>
-              setVendor({ ...vendor, phone_number: value })
-          )}
+          {field("Phone number", vendor.phone_number,
+            (value) => setVendor({ ...vendor, phone_number: value }))}
 
-          {field(
-            "Location",
-            vendor.location,
-            (value) =>
-              setVendor({ ...vendor, location: value })
-          )}
+          {field("Location", vendor.location,
+            (value) => setVendor({ ...vendor, location: value }))}
 
           <button type="submit">
             {editingVendorId ? "Update vendor" : "Add vendor"}
@@ -620,7 +601,6 @@ export default function App() {
                     <td>{v.phone_number}</td>
                     <td>{v.location}</td>
                     <td>{v.registration_date?.slice(0, 10)}</td>
-
                     <td>
                       <button
                         type="button"
@@ -631,7 +611,6 @@ export default function App() {
                             phone_number: v.phone_number || "",
                             location: v.location || ""
                           });
-
                           setEditingVendorId(v.vendor_id);
                           setError("");
                           setNotice("");
@@ -643,11 +622,9 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (
-                            window.confirm(
-                              `Are you sure you want to delete ${v.vendor_name}?`
-                            )
-                          ) {
+                          if (window.confirm(
+                            `Are you sure you want to delete ${v.vendor_name}?`
+                          )) {
                             run(async () => {
                               await api.del(`/vendors/${v.vendor_id}`);
 
@@ -676,10 +653,7 @@ export default function App() {
     );
   }
 
-  // =====================================
   // PURCHASES
-  // =====================================
-
   if (page === "Purchases") {
     content = (
       <>
@@ -689,21 +663,10 @@ export default function App() {
           onSubmit={(e) => {
             e.preventDefault();
 
-            run(() =>
-              api.post("/purchases", purchase).then(() =>
-                setPurchase({
-                  supplier_id: "",
-                  items: [
-                    {
-                      fruit_id: "",
-                      quantity: 1,
-                      packaging_size: "SMALL",
-                      unit_cost: 0
-                    }
-                  ]
-                })
-              )
-            );
+            run(async () => {
+              await api.post("/purchases", purchase);
+              setPurchase(initialPurchase());
+            });
           }}
         >
           <label>
@@ -720,8 +683,7 @@ export default function App() {
               }
             >
               <option value="">Choose supplier</option>
-
-              {(data.suppliers || []).map((s) => (
+              {data.suppliers.map((s) => (
                 <option value={s.supplier_id} key={s.supplier_id}>
                   {s.business_name}
                 </option>
@@ -733,18 +695,12 @@ export default function App() {
             <div className="item-row" key={i}>
               <label>
                 Fruit
-
                 <select
                   required
                   value={item.fruit_id}
                   onChange={(e) =>
-                    updateItem(
-                      purchase,
-                      setPurchase,
-                      i,
-                      "fruit_id",
-                      e.target.value
-                    )
+                    updateItem(purchase, setPurchase, i,
+                      "fruit_id", e.target.value)
                   }
                 >
                   <option value="">Choose fruit</option>
@@ -754,17 +710,11 @@ export default function App() {
 
               <label>
                 Packaging
-
                 <select
                   value={item.packaging_size}
                   onChange={(e) =>
-                    updateItem(
-                      purchase,
-                      setPurchase,
-                      i,
-                      "packaging_size",
-                      e.target.value
-                    )
+                    updateItem(purchase, setPurchase, i,
+                      "packaging_size", e.target.value)
                   }
                 >
                   {sizes.map((size) => (
@@ -775,39 +725,27 @@ export default function App() {
 
               <label>
                 Boxes
-
                 <input
                   type="number"
                   min="1"
                   value={item.quantity}
                   onChange={(e) =>
-                    updateItem(
-                      purchase,
-                      setPurchase,
-                      i,
-                      "quantity",
-                      e.target.value
-                    )
+                    updateItem(purchase, setPurchase, i,
+                      "quantity", e.target.value)
                   }
                 />
               </label>
 
               <label>
                 Unit cost (M)
-
                 <input
                   type="number"
                   min="0"
                   step=".01"
                   value={item.unit_cost}
                   onChange={(e) =>
-                    updateItem(
-                      purchase,
-                      setPurchase,
-                      i,
-                      "unit_cost",
-                      e.target.value
-                    )
+                    updateItem(purchase, setPurchase, i,
+                      "unit_cost", e.target.value)
                   }
                 />
               </label>
@@ -835,10 +773,7 @@ export default function App() {
     );
   }
 
-  // =====================================
   // SALES
-  // =====================================
-
   if (page === "Sales") {
     content = (
       <>
@@ -848,22 +783,10 @@ export default function App() {
           onSubmit={(e) => {
             e.preventDefault();
 
-            run(() =>
-              api.post("/sales", sale).then(() =>
-                setSale({
-                  vendor_id: "",
-                  payment_method: "CASH",
-                  amount_paid: 0,
-                  items: [
-                    {
-                      fruit_id: "",
-                      quantity: 1,
-                      packaging_size: "SMALL"
-                    }
-                  ]
-                })
-              )
-            );
+            run(async () => {
+              await api.post("/sales", sale);
+              setSale(initialSale());
+            });
           }}
         >
           <label>
@@ -877,8 +800,7 @@ export default function App() {
               }
             >
               <option value="">Choose vendor</option>
-
-              {(data.vendors || []).map((v) => (
+              {data.vendors.map((v) => (
                 <option key={v.vendor_id} value={v.vendor_id}>
                   {v.vendor_name}
                 </option>
@@ -890,18 +812,12 @@ export default function App() {
             <div className="item-row" key={i}>
               <label>
                 Fruit
-
                 <select
                   required
                   value={item.fruit_id}
                   onChange={(e) =>
-                    updateItem(
-                      sale,
-                      setSale,
-                      i,
-                      "fruit_id",
-                      e.target.value
-                    )
+                    updateItem(sale, setSale, i,
+                      "fruit_id", e.target.value)
                   }
                 >
                   <option value="">Choose fruit</option>
@@ -911,17 +827,11 @@ export default function App() {
 
               <label>
                 Packaging
-
                 <select
                   value={item.packaging_size}
                   onChange={(e) =>
-                    updateItem(
-                      sale,
-                      setSale,
-                      i,
-                      "packaging_size",
-                      e.target.value
-                    )
+                    updateItem(sale, setSale, i,
+                      "packaging_size", e.target.value)
                   }
                 >
                   {sizes.map((size) => (
@@ -932,19 +842,13 @@ export default function App() {
 
               <label>
                 Boxes
-
                 <input
                   type="number"
                   min="1"
                   value={item.quantity}
                   onChange={(e) =>
-                    updateItem(
-                      sale,
-                      setSale,
-                      i,
-                      "quantity",
-                      e.target.value
-                    )
+                    updateItem(sale, setSale, i,
+                      "quantity", e.target.value)
                   }
                 />
               </label>
@@ -962,14 +866,10 @@ export default function App() {
           <div className="form-grid">
             <label>
               Payment method
-
               <select
                 value={sale.payment_method}
                 onChange={(e) =>
-                  setSale({
-                    ...sale,
-                    payment_method: e.target.value
-                  })
+                  setSale({ ...sale, payment_method: e.target.value })
                 }
               >
                 {["CASH", "MOBILE_MONEY", "CREDIT"].map((method) => (
@@ -978,12 +878,9 @@ export default function App() {
               </select>
             </label>
 
-            {field(
-              "Amount paid (M)",
-              sale.amount_paid,
+            {field("Amount paid (M)", sale.amount_paid,
               (value) => setSale({ ...sale, amount_paid: value }),
-              "number"
-            )}
+              "number")}
           </div>
 
           <button type="submit">Complete sale</button>
@@ -998,10 +895,7 @@ export default function App() {
     );
   }
 
-  // =====================================
   // REPORTS
-  // =====================================
-
   if (page === "Reports") {
     content = (
       <>
@@ -1009,7 +903,7 @@ export default function App() {
 
         {table(
           ["Fruit", "Boxes sold"],
-          (data.top || []).map((item) => [
+          data.top.map((item) => [
             item.fruit_name,
             item.boxes_sold
           ])
@@ -1018,13 +912,8 @@ export default function App() {
         <h2>Vendor outstanding balances</h2>
 
         {table(
-          [
-            "Vendor",
-            "Total sales (M)",
-            "Paid (M)",
-            "Outstanding (M)"
-          ],
-          (data.balances || []).map((item) => [
+          ["Vendor", "Total sales (M)", "Paid (M)", "Outstanding (M)"],
+          data.balances.map((item) => [
             item.vendor_name,
             Number(item.total_sales).toFixed(2),
             Number(item.total_paid).toFixed(2),
@@ -1033,22 +922,17 @@ export default function App() {
         )}
 
         <h2>Sales revenue by date range</h2>
-
         <RevenueReport />
       </>
     );
   }
 
-  // =====================================
   // MAIN APPLICATION LAYOUT
-  // =====================================
-
   return (
     <div className="app">
       <aside>
         <div className="brand">
           <div className="logo">BF</div>
-
           <div>
             <b>BATLOUNG FARM</b>
             <small>Distribution system</small>
@@ -1084,12 +968,11 @@ export default function App() {
             <span className="eyebrow">
               FRESH PRODUCE MANAGEMENT
             </span>
-
             <h1>{page}</h1>
           </div>
 
-          <button className="refresh" onClick={load}>
-            ↻ Refresh
+          <button className="refresh" onClick={load} disabled={loading}>
+            ↻ {loading ? "Refreshing..." : "Refresh"}
           </button>
         </header>
 
@@ -1113,21 +996,40 @@ export default function App() {
   );
 }
 
-// =====================================
 // REVENUE REPORT COMPONENT
-// =====================================
-
 function RevenueReport() {
   const [from, setFrom] = useState("2026-11-01");
   const [to, setTo] = useState("2026-11-30");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function calculateRevenue() {
+    if (!from || !to || from > to) {
+      setError("Please select a valid date range.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await api.get(
+        `/reports/revenue?from=${from}&to=${to}`
+      );
+
+      setResult(response);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="revenue">
       <label>
         From
-
         <input
           type="date"
           value={from}
@@ -1137,7 +1039,6 @@ function RevenueReport() {
 
       <label>
         To
-
         <input
           type="date"
           value={to}
@@ -1145,21 +1046,8 @@ function RevenueReport() {
         />
       </label>
 
-      <button
-        onClick={async () => {
-          try {
-            setError("");
-            setResult(
-              await api.get(
-                `/reports/revenue?from=${from}&to=${to}`
-              )
-            );
-          } catch (e) {
-            setError(e.message);
-          }
-        }}
-      >
-        Calculate revenue
+      <button onClick={calculateRevenue} disabled={loading}>
+        {loading ? "Calculating..." : "Calculate revenue"}
       </button>
 
       {result && (
